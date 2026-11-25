@@ -1,0 +1,87 @@
+const BUCKET='permit-drawing-markups', PROJECT='Arbroath-Combined-Lot-Part9';
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+export function normalizedPoint(event,rect){return {x:Math.min(1,Math.max(0,(event.clientX-rect.left)/rect.width)),y:Math.min(1,Math.max(0,(event.clientY-rect.top)/rect.height))};}
+export function drawShape(ctx,shape,w,h){
+ const a={x:shape.a.x*w,y:shape.a.y*h},b={x:shape.b.x*w,y:shape.b.y*h};
+ ctx.save();ctx.strokeStyle=shape.color;ctx.fillStyle=shape.color;ctx.lineWidth=Math.max(3,w/350);ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
+ if(shape.tool==='circle')ctx.ellipse((a.x+b.x)/2,(a.y+b.y)/2,Math.max(2,Math.abs(b.x-a.x)/2),Math.max(2,Math.abs(b.y-a.y)/2),0,0,2*Math.PI);
+ else if(shape.tool==='rect')ctx.rect(a.x,a.y,b.x-a.x,b.y-a.y);
+ else if(shape.tool==='arrow'){ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);const t=Math.atan2(b.y-a.y,b.x-a.x),r=Math.max(15,w/65);ctx.moveTo(b.x-r*Math.cos(t-.5),b.y-r*Math.sin(t-.5));ctx.lineTo(b.x,b.y);ctx.lineTo(b.x-r*Math.cos(t+.5),b.y-r*Math.sin(t+.5));}
+ else{ctx.arc(a.x,a.y,Math.max(10,w/90),0,2*Math.PI);ctx.fill();ctx.fillStyle='#fff';ctx.font=`bold ${Math.max(13,w/85)}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(shape.number||1),a.x,a.y);}
+ ctx.stroke();ctx.restore();
+}
+export function createDrawingMarkups(api){
+ const L=(zh,en)=>api.lang()==='en'?en:zh;
+ const url=path=>api.db.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+ let pdfLibrary;
+ function dialog(title){
+  const d=document.createElement('dialog');d.className='drawing-markup-dialog';d.innerHTML=`<header><h2>${esc(title)}</h2><button type="button" data-close aria-label="${L('关闭','Close')}">×</button></header><div class="markup-dialog-content"></div>`;
+  document.body.append(d);d.querySelector('[data-close]').onclick=()=>d.close();d.addEventListener('close',()=>d.remove(),{once:true});d.showModal();return d;
+ }
+ function viewer(row){
+  const d=dialog(`${row.issue_id} · ${row.sheet||row.file_name} · ${L('第','p. ')}${row.page}${L('页','')}`),body=d.querySelector('.markup-dialog-content');
+  body.innerHTML=`<p>${esc(row.caption)}</p><div class="markup-toolbar"><button type="button" data-original>${L('查看未标注截图','Show original screenshot')}</button><label>${L('缩放','Zoom')} <input type="range" min="60" max="250" value="100" step="10" data-zoom></label><button type="button" data-copy>${L('复制此标注链接','Copy markup link')}</button></div><div class="markup-zoom"><img src="${esc(url(row.annotated_path))}" alt="${esc(row.caption)}"></div><p class="subtle">${esc(row.file_name)} · ${esc(row.revision||L('版本未填写','Revision not specified'))} · ${esc(row.author_name)} · ${esc(new Date(row.created_at).toLocaleString(api.lang()==='en'?'en-CA':'zh-CN'))}</p><p class="markup-feedback" role="status"></p>`;
+  let original=false;const img=body.querySelector('img');
+  body.querySelector('[data-original]').onclick=e=>{original=!original;img.src=url(original?row.original_path:row.annotated_path);e.currentTarget.textContent=original?L('显示圈点截图','Show annotated screenshot'):L('查看未标注截图','Show original screenshot');};
+  body.querySelector('[data-zoom]').oninput=e=>img.style.width=e.target.value+'%';
+  body.querySelector('[data-copy]').onclick=async()=>{const link=new URL(location.href);link.searchParams.set('issue',row.issue_id);link.searchParams.set('markup',row.id);try{await navigator.clipboard.writeText(link.href);body.querySelector('.markup-feedback').textContent=L('已复制','Link copied');}catch{body.querySelector('.markup-feedback').textContent=link.href;}};
+ }
+ async function mount(issue){
+  if(api.currentIssue()!==issue.id)return;
+  const root=document.getElementById('detail');root.querySelector('.drawing-markup-panel')?.remove();
+  const panel=document.createElement('section');panel.className='drawing-markup-panel';
+  panel.innerHTML=`<div class="markup-heading"><h3>${L('图纸圈点与截图','Drawing markups & snapshots')}</h3>${api.canAdd(issue)?`<button type="button" class="primary" data-add-markup>＋ ${L('添加图纸圈点','Add drawing markup')}</button>`:''}</div><p class="subtle">${L('将具体位置圈出，并关联文件、PDF页码和版本。截图属于所选版本，换版后需重新核对。所有项目访客均可查看已发布的圈点。','Highlight the exact location and link it to a file, PDF page and revision. Snapshots belong to the selected revision; recheck them when drawings change. Published markups are visible to project visitors.')}</p><div class="markup-gallery" aria-live="polite">${L('正在读取…','Loading…')}</div>`;
+  // Place the gallery after the existing drawing-reference cards.
+  const headings=[...root.querySelectorAll('h3')];const next=headings.find(e=>/要向设计师确认|Confirmation required from designer/.test(e.textContent));
+  if(next)next.before(panel);else root.append(panel);
+  panel.querySelector('[data-add-markup]')?.addEventListener('click',()=>editor(issue,panel));
+  const {data,error}=await api.db.from('permit_drawing_markups').select('*').eq('issue_id',issue.id).order('created_at',{ascending:false});
+  if(!panel.isConnected)return;
+  const gallery=panel.querySelector('.markup-gallery');
+  if(error){gallery.textContent=L('圈点读取失败，请刷新重试：','Unable to load markups. Refresh and retry: ')+error.message;return;}
+  if(!data.length){gallery.innerHTML=`<p class="subtle">${L('尚无圈点截图。打开原图截取相关位置，点击“添加图纸圈点”上传或粘贴；也可选取本地PDF并载入指定页。','No snapshots yet. Capture the relevant area of the drawing and choose Add drawing markup to upload or paste it, or select a local PDF and load a page.')}</p>`;return;}
+  gallery.innerHTML=data.map((r,i)=>`<article class="markup-card"><button type="button" data-view="${i}" aria-label="${esc(L('放大圈点：','Enlarge markup: ')+r.caption)}"><img loading="lazy" src="${esc(url(r.annotated_path))}" alt="${esc(r.caption)}"><strong>${esc(r.sheet||r.file_name)} · ${L('PDF第','PDF p. ')}${r.page}${L('页','')}</strong><span>${esc(r.caption)}</span></button><small>${esc(r.file_name)}<br>${esc(r.revision||L('版本未填写','Revision not specified'))} · ${esc(r.author_name)} · ${esc(new Date(r.created_at).toLocaleDateString(api.lang()==='en'?'en-CA':'zh-CN'))}</small></article>`).join('');
+  gallery.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>viewer(data[Number(b.dataset.view)]));
+  const requested=new URLSearchParams(location.search).get('markup'),match=data.find(r=>r.id===requested);
+  if(match&&!document.querySelector('.drawing-markup-dialog')){viewer(match);const link=new URL(location.href);link.searchParams.delete('markup');history.replaceState(null,'',link);}
+ }
+ function editor(issue,panel){
+  const d=dialog(`${L('添加图纸圈点','Add drawing markup')} · ${issue.id}`),body=d.querySelector('.markup-dialog-content');
+  const files=[...new Set([...(issue.sources||[]).map(s=>s.file),...api.documents().filter(x=>!api.excluded(x)).map(x=>x.file)])].filter(Boolean);
+  const first=issue.sources?.[0]||{};
+  body.innerHTML=`<form><div class="markup-fields"><label>${L('图纸文件 *','Drawing file *')}<select name="file" required>${files.map(f=>`<option>${esc(f)}</option>`).join('')}<option value="__other">${L('其他文件（填写名称）','Other file (enter name)')}</option></select></label><label data-other hidden>${L('文件名称 *','Filename *')}<input name="other" maxlength="400"></label><label>${L('PDF页码 *','PDF page *')}<input name="page" type="number" min="1" max="2000" value="${Number(first.page)||1}" required></label><label>${L('图号','Sheet number')}<input name="sheet" maxlength="100" value="${esc(first.sheet||'')}"></label><label>${L('图纸版本／日期','Drawing revision / date')}<input name="revision" maxlength="200" placeholder="Rev 2 / 2026-09-29"></label></div><div class="markup-toolbar"><button type="button" data-source>${L('打开原图','Open source drawing')} ↗</button><label class="markup-file">${L('上传截图 / 本地 PDF','Upload screenshot / local PDF')}<input type="file" name="image" accept="image/png,image/jpeg,image/webp,application/pdf"></label><button type="button" data-pdf hidden>${L('载入此PDF页','Load PDF page')}</button></div><p class="subtle">${L('也可在此窗口按 Ctrl+V 粘贴截图。选取PDF时，以所填PDF页码载入整页；可修改页码后重新载入。','You can also paste a screenshot here with Ctrl+V. A local PDF loads the entered PDF page; change the page number and load again as needed.')}</p><div class="markup-toolbar" role="group" aria-label="${L('标注工具','Annotation tools')}">${[['circle','○ '+L('圈选','Circle')],['rect','□ '+L('方框','Box')],['arrow','↗ '+L('箭头','Arrow')],['pin','● '+L('定位点','Pin')]].map(([t,label])=>`<button type="button" data-tool="${t}" aria-pressed="${t==='circle'}">${label}</button>`).join('')}<label>${L('颜色','Color')}<input name="color" type="color" value="#ef4444"></label><button type="button" data-undo>${L('撤销','Undo')}</button><button type="button" data-clear>${L('清除圈点','Clear marks')}</button></div><div class="markup-canvas-wrap"><canvas width="1000" height="600" aria-label="${L('图纸标注区域，可拖动鼠标或手指圈点','Drawing annotation area; drag with the mouse or a finger')}"></canvas><p data-empty>${L('上传或粘贴截图后，在图上拖动圈出问题位置','Upload or paste a screenshot, then drag to highlight the issue')}</p></div><label>${L('位置说明 *','Location description *')}<textarea name="caption" required maxlength="2000" rows="2" placeholder="${L('例如：北侧主入口坡道与排水槽交接处','e.g. Junction of the north entrance ramp and trench drain')}"></textarea></label><p class="subtle">${L('保存后作为此问题的共享图纸定位证据显示，并记录上传人及时间。请只上传与本问题有关的图纸内容。','Saving publishes this snapshot with the issue and records the author and time. Include only drawing content relevant to this issue.')}</p><p class="markup-feedback" role="status" aria-live="polite"></p><footer><button type="button" data-cancel>${L('取消','Cancel')}</button><button class="primary" type="submit">${L('保存圈点截图','Save markup snapshot')}</button></footer></form>`;
+  const form=body.querySelector('form'),f=form.elements,canvas=body.querySelector('canvas'),ctx=canvas.getContext('2d'),msg=body.querySelector('.markup-feedback');
+  let image=null,pdf=null,shapes=[],active=null,tool='circle',loading=false,busy=false,generation=0,renderedPdfPage=null;
+  const paint=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);if(image)ctx.drawImage(image,0,0,canvas.width,canvas.height);for(const s of shapes)drawShape(ctx,s,canvas.width,canvas.height);if(active)drawShape(ctx,active,canvas.width,canvas.height);};
+  const syncFile=()=>{const s=issue.sources?.find(s=>s.file===f.file.value);if(s){f.page.value=s.page||1;f.sheet.value=s.sheet||'';}f.revision.value=api.documents().find(x=>x.file===f.file.value)?.version||'';body.querySelector('[data-other]').hidden=f.file.value!=='__other';f.other.required=f.file.value==='__other';};syncFile();
+  f.file.onchange=syncFile;
+  body.querySelector('[data-source]').onclick=()=>{const link=api.pdfUrl(f.file.value,Number(f.page.value));if(link)window.open(link,'_blank','noopener');else msg.textContent=L('未找到该文件的在线链接，请选择本地PDF。','No online link found. Select a local PDF.');};
+  function useImage(img,page=null){if(image?.close)image.close();const scale=Math.min(1,2400/Math.max(img.width,img.height));canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);image=img;renderedPdfPage=page;shapes=[];active=null;body.querySelector('[data-empty]').hidden=true;paint();}
+  async function renderPdf(){if(!pdf||loading)return;loading=true;msg.textContent=L('正在生成PDF页面…','Rendering PDF page…');try{const pageNo=Number(f.page.value);if(!Number.isInteger(pageNo)||pageNo<1||pageNo>pdf.numPages)throw Error(L('此PDF页码范围：1–','PDF page range: 1–')+pdf.numPages);const p=await pdf.getPage(pageNo),v=p.getViewport({scale:1}),view=p.getViewport({scale:Math.min(3,2400/Math.max(v.width,v.height))}),off=document.createElement('canvas');off.width=Math.round(view.width);off.height=Math.round(view.height);await p.render({canvasContext:off.getContext('2d'),viewport:view}).promise;if(d.isConnected)useImage(off,pageNo);msg.textContent=L('已载入PDF第','Loaded PDF page ')+pageNo+L('页（共',' of ')+pdf.numPages+L('页）','');}catch(e){msg.textContent=e.message;}finally{loading=false;}}
+  async function load(file){if(!file||busy||loading)return;const gen=++generation;msg.textContent='';if(file.size>40*1024*1024){msg.textContent=L('文件超过40MB，请先截取相关页面或截图。','File exceeds 40 MB. Extract the relevant page or use a screenshot.');return;}loading=true;
+   try{if(file.type==='application/pdf'||/\.pdf$/i.test(file.name)){if(!pdfLibrary){pdfLibrary=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs');pdfLibrary.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';}await pdf?.destroy();pdf=await pdfLibrary.getDocument({data:await file.arrayBuffer(),isEvalSupported:false}).promise;renderedPdfPage=null;body.querySelector('[data-pdf]').hidden=false;loading=false;await renderPdf();}
+   else{if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error(L('请选择PNG、JPEG、WebP图片或PDF。','Choose PNG, JPEG, WebP or PDF.'));await pdf?.destroy();pdf=null;body.querySelector('[data-pdf]').hidden=true;const bitmap=await createImageBitmap(file);if(bitmap.width*bitmap.height>60000000){bitmap.close();throw Error(L('图片过大，请裁剪后重试。','Image is too large. Crop and retry.'));}if(gen===generation&&d.isConnected)useImage(bitmap);else bitmap.close();}
+   }catch(e){msg.textContent=L('载入失败：','Could not load: ')+e.message;}finally{loading=false;}}
+  f.image.onchange=()=>load(f.image.files[0]);body.querySelector('[data-pdf]').onclick=renderPdf;
+  d.addEventListener('paste',e=>{const file=[...(e.clipboardData?.items||[])].find(i=>i.kind==='file'&&i.type.startsWith('image/'))?.getAsFile();if(file){e.preventDefault();load(file);}});
+  body.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{tool=b.dataset.tool;body.querySelectorAll('[data-tool]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));});
+  body.querySelector('[data-undo]').onclick=()=>{shapes.pop();paint();};body.querySelector('[data-clear]').onclick=()=>{shapes=[];paint();};
+  canvas.onpointerdown=e=>{if(!image||busy||loading||e.button!==0)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);const p=normalizedPoint(e,canvas.getBoundingClientRect());active={tool,a:p,b:p,color:f.color.value,number:shapes.filter(s=>s.tool==='pin').length+1};paint();};
+  canvas.onpointermove=e=>{if(!active)return;active.b=normalizedPoint(e,canvas.getBoundingClientRect());paint();};
+  canvas.onpointerup=()=>{if(!active)return;if(active.tool==='pin'||Math.hypot(active.a.x-active.b.x,active.a.y-active.b.y)>.005)shapes.push(active);active=null;paint();};canvas.onpointercancel=()=>{active=null;paint();};
+  body.querySelector('[data-cancel]').onclick=()=>d.close();d.addEventListener('cancel',e=>{if(busy)e.preventDefault();});d.addEventListener('close',()=>{generation++;pdf?.destroy();if(image?.close)image.close();},{once:true});
+  form.onsubmit=async e=>{e.preventDefault();if(busy)return;if(!api.canAdd(issue)){msg.textContent=L('请使用已授权账号登录。','Sign in with an authorized account.');return;}if(!image||loading){msg.textContent=L('请先载入图纸截图。','Load a drawing screenshot first.');return;}const filename=f.file.value==='__other'?f.other.value.trim():f.file.value,page=Number(f.page.value),caption=f.caption.value.trim();if(!filename||!caption||!Number.isInteger(page)||page<1||page>2000)return;if(pdf&&page!==renderedPdfPage){msg.textContent=L('页码已改变，请点击“载入此PDF页”后再保存，确保截图与页码一致。','The page number changed. Click Load PDF page before saving so the snapshot matches its page reference.');return;}
+   busy=true;const close=d.querySelector('[data-close]');close.disabled=true;const controls=[...form.querySelectorAll('input,select,textarea,button')];controls.forEach(x=>x.disabled=true);msg.textContent=L('正在保存共享圈点…','Saving shared markup…');
+   const id=crypto.randomUUID(),uploaded=[];let committed=false;
+   try{const user=(await api.db.auth.getSession()).data.session?.user;if(!user)throw Error(L('登录已过期，请重新登录。','Session expired. Sign in again.'));const base=`${PROJECT}/${user.id}/${id}`,originalPath=base+'/original.jpg',annotatedPath=base+'/annotated.jpg';const off=document.createElement('canvas');off.width=canvas.width;off.height=canvas.height;const oc=off.getContext('2d');oc.fillStyle='#fff';oc.fillRect(0,0,off.width,off.height);oc.drawImage(image,0,0,off.width,off.height);const original=await new Promise(r=>off.toBlob(r,'image/jpeg',.88));for(const s of shapes)drawShape(oc,s,off.width,off.height);const marked=await new Promise(r=>off.toBlob(r,'image/jpeg',.9));
+    for(const [path,blob] of [[originalPath,original],[annotatedPath,marked]]){if(!blob||blob.size>5*1024*1024)throw Error(L('截图过大，请裁剪后重试。','Snapshot too large. Crop and retry.'));const {error}=await api.db.storage.from(BUCKET).upload(path,blob,{contentType:'image/jpeg',upsert:false});if(error)throw error;uploaded.push(path);}
+    const row={id,project_id:PROJECT,issue_id:issue.id,file_name:filename,page,sheet:f.sheet.value.trim(),revision:f.revision.value.trim(),caption,original_path:originalPath,annotated_path:annotatedPath,geometry:shapes,author_name:api.member().display_name||'Project member'};
+    const {error}=await api.db.from('permit_drawing_markups').insert(row);if(error)throw error;committed=true;d.close();await mount(issue);
+   }catch(err){if(uploaded.length&&!committed)await api.db.storage.from(BUCKET).remove(uploaded);msg.textContent=L('未能保存，草稿仍保留：','Not saved. Your draft is preserved: ')+err.message;}
+   finally{busy=false;close.disabled=false;controls.forEach(x=>x.disabled=false);}
+  };
+ }
+ return {mount};
+}
+
+

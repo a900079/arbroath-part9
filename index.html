@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>工程设计图纸协调台</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./new-issue.css">
+  <link rel="stylesheet" href="./meetings.css">
+  <link rel="stylesheet" href="./construction.css">
+  <link rel="stylesheet" href="./construction-nav.css">
+  <link rel="stylesheet" href="./construction-help.css">
+  <link rel="stylesheet" href="./gc-memo.css">
+  <link rel="stylesheet" href="./settings.css">
+  <link rel="stylesheet" href="./guest-comments.css">
+  <link rel="stylesheet" href="./responsibility.css">
+  <link rel="stylesheet" href="./issue-sort.css">
+  <link rel="stylesheet" href="./not-an-issue.css">
+  <link rel="stylesheet" href="./print.css" media="print">
+</head>
+<body>
+  <div id="loginScreen" class="login-screen">
+    <section class="login-card" aria-labelledby="loginTitle">
+      <div id="loginLanguages" class="login-languages"><button type="button" data-entry-lang="zh">简体中文</button><button type="button" data-entry-lang="zh-Hant">繁體中文</button><button type="button" data-entry-lang="en">English</button></div>
+      <div class="brand-mark">AP</div>
+      <p class="eyebrow">ARBROATH · PERMIT COORDINATION</p>
+      <h1 id="loginTitle">工程设计图纸协调台</h1>
+      <p id="loginCopy" class="login-copy">仅限项目成员访问。使用已登记的 Google 邮箱登录。</p>
+      <button id="googleLogin" class="google-button"><span class="google-g">G</span>使用 Google 登录</button>
+      <details id="emailLogin" class="email-login"></details>
+      <section id="passwordLogin" class="email-login"></section>
+      <form id="guestEntryForm" class="guest-entry">
+        <h2 id="guestEntryTitle">游客进入</h2>
+        <label><span id="guestNameLabel">姓名 *</span><input id="guestName" maxlength="80" required autocomplete="name" placeholder="例如：Jackie"></label>
+        <label><span id="guestCompanyLabel">公司／专业（可选）</span><input id="guestCompany" maxlength="120" autocomplete="organization" placeholder="例如：David Mah Architect"></label>
+        <button id="enterGuest" class="primary" type="submit">以游客身份进入</button>
+        <p id="guestEntryCopy" class="subtle">可查看问题与图纸、提交留言；不能修改项目资料。姓名未经身份验证。</p>
+      </form>
+      <p id="loginMessage" class="message" role="status"></p>
+    </section>
+  </div>
+
+  <div id="app" hidden>
+    <header>
+      <div class="brand-block">
+        <p class="eyebrow">ARBROATH · PERMIT COORDINATION</p>
+        <div class="title-row">
+          <h1 id="projectTitle">工程设计图纸协调台</h1>
+          <button id="openNewIssue" class="new-issue-button" hidden>＋ 上传问题</button>
+        </div>
+      </div>
+      <div class="account-bar">
+        <div id="languageSwitcher" class="language-switcher" aria-label="Language / 语言">
+          <button type="button" data-lang="zh" aria-pressed="true">简体中文</button>
+          <button type="button" data-lang="zh-Hant" aria-pressed="false">繁體中文</button>
+          <button type="button" data-lang="en" aria-pressed="false">English</button>
+        </div>
+        <span id="saveState" class="save-state">云端已同步</span>
+        <span id="whoami"></span>
+        <button id="guestLogin" class="quiet" hidden>登录后编辑</button>
+        <button id="refresh" class="quiet">刷新</button>
+        <button id="logout" class="quiet">退出</button>
+        <details id="settingsMenu" class="settings-menu">
+          <summary id="settingsLabel">设置 ▾</summary>
+          <div class="settings-panel" aria-label="设置 / Settings">
+            <button id="exportBackup" type="button">导出备份</button>
+            <button id="exportOpen" type="button">导出沟通清单</button>
+            <button id="print" type="button">打印</button>
+            <hr>
+            <button id="settingsHistory" data-view="history" type="button" hidden>修改记录</button>
+            <button id="membersNav" data-view="members" type="button" hidden>成员权限</button>
+          </div>
+        </details>
+      </div>
+    </header>
+
+    <nav id="workspaceSwitcher" class="workspace-switcher" aria-label="项目工作区 / Project workspaces">
+      <button type="button" data-workspace="permit" aria-pressed="true">工程设计图纸协调</button>
+      <button type="button" data-workspace="construction" aria-pressed="false">后期施工管理</button>
+      <button type="button" data-workspace="gcMemo" aria-pressed="false">General Contractor 施工步骤建议备忘录</button>
+      <span id="workspaceHint">6360 + 6380 · 合并地块 · Burnaby</span>
+    </nav>
+    <section id="constructionRoot" hidden></section>
+    <section id="gcMemoRoot" class="gc-memo-root" hidden>
+      <div class="gc-memo-heading"><div><h2 id="gcMemoHeading">General Contractor 施工步骤建议备忘录</h2><p id="gcMemoCopy">Spark Construction Company · Owner / GC 提供原细则，AI辅助审查建议待确认；不是批准施工指令。时间线暂按2027年2月开工。</p></div><span id="gcMemoOpen">新方案施工步骤备忘录待重新编制</span></div>
+      <iframe id="gcMemoFrame" title="General Contractor · Spark Construction Company 施工流程审查"  referrerpolicy="no-referrer"></iframe>
+    </section>
+
+    <main class="shell">
+      <section class="context">
+        <strong id="contextTitle">共享项目</strong>
+        <p id="contextText">登录后读取最新协调资料。</p>
+      </section>
+      <section class="project-basis" aria-labelledby="projectBasisTitle">
+        <strong id="projectBasisTitle">项目法规与审批依据</strong>
+        <p id="projectBasisText">讨论后的新申请基准：6360 与 6380 已合并为一个 lot，拟按一个建筑重新申请。Owner 提供的方向为 BCBC Part 9、单一 600V/600A 电力系统，并按新方案考虑完整 sprinkler 系统。适用性、喷淋及服务参数仍须由 Architect、相关工程师和 City of Burnaby 书面确认；新图纸尚待设计师重画。</p>
+      </section>
+
+      <section id="initialization" class="initialization" hidden>
+        <h2>初始化项目资料</h2>
+        <p>云端数据库尚未载入 Permit Audit。仅管理员可选择本项目的 <code>project-data.json</code> 完成首次初始化。</p>
+        <input id="seedFile" type="file" accept="application/json,.json">
+        <button id="seedProject" class="primary">上传并初始化</button>
+      </section>
+
+      <div id="workspace" hidden>
+        <section class="metrics" id="metrics" aria-label="项目指标"></section>
+        <nav id="nav" aria-label="主要视图">
+          <button data-view="issues" aria-selected="true">问题与定位</button>
+          <button data-view="professionals" aria-selected="false">设计师任务</button>
+          <button data-view="documents" aria-selected="false">文件版本</button>
+          <button data-view="facts" aria-selected="false">已知信息</button>
+          <button data-view="meetings" aria-selected="false">会议讨论记录</button>
+        </nav>
+
+        <section id="issuesView">
+          <div class="view-heading"><h2 id="issuesHeading">问题协调与图纸定位</h2><p id="issuesIntro">按责任专业查看问题、确认事项、所需动作及对应图纸位置。</p></div>
+          <div class="toolbar">
+            <label>搜索问题 / 图号 / 文件<input id="search" placeholder="例如：M2.0、Civil、标高"></label>
+            <label>责任专业<select id="discipline"></select></label>
+            <label>当前状态<select id="statusFilter"></select></label>
+            <label>问题性质<select id="typeFilter"></select></label>
+            <label>排序<select id="sortFilter"></select></label>
+          </div>
+          <label class="checkrow task-visibility"><input id="showSupportingIssues" type="checkbox"><span id="showSupportingLabel">显示协作事项（Supporting items）</span></label>
+          <p class="subtle" id="resultCount" aria-live="polite"></p>
+          <div class="layout">
+            <div class="list" id="list"></div>
+            <article class="detail" id="detail"></article>
+          </div>
+        </section>
+
+        <section id="professionalsView" hidden><div class="view-heading"><h2 id="professionalsHeading">设计师责任与跟进任务</h2><p id="professionalsIntro">汇总各专业尚未关闭的问题及需要回复或修改的事项。</p></div><label class="checkrow task-visibility"><input id="showSupportingPros" type="checkbox"><span id="showSupportingProsLabel">显示协作事项（Supporting items）</span></label><div class="professional-grid" id="professionals"></div></section>
+        <section id="documentsView" hidden>
+          <div class="view-heading"><h2 id="documentsHeading">Permit 材料总表与版本状态</h2><p id="documentsIntro">逐份核对文件、专业、版本、状态和修订依据。“收到”仅表示文件存在；“可提交”只能由管理员确认。</p></div>
+          <p id="documentCleanupNote" class="subtle"></p>
+          <label class="checkrow"><input id="showExcludedDocs" type="checkbox"><span id="showExcludedLabel">显示排除的重复／错放副本（仅供追溯）</span></label>
+          <div class="tablewrap"><table><thead><tr><th>文件 / 专业</th><th>页数与版本</th><th>角色 / 关联</th><th>状态</th><th>修订文件或备注</th></tr></thead><tbody id="documents"></tbody></table></div>
+          <button id="saveDocs" class="primary section-action">保存文件状态</button>
+        </section>
+        <section id="factsView" hidden><div class="view-heading"><h2 id="factsHeading">已确认的项目依据</h2><p id="factsIntro">仅记录已确认的项目事实、审批基础和重新提交条件。</p></div><div class="facts" id="facts"></div><article class="fact gate-card"><h3>重新提交的完成条件</h3><ol><li>关键问题已取得专业回复并完成改图。</li><li>跨专业接口已书面确认。</li><li>地址、版本、图号与签章核对完成。</li><li>错误副本不进入上传包。</li><li>能源顾问及 CRP 确认最终设计。</li></ol><p id="gate" class="subtle"></p></article></section>
+        <section id="meetingsView" hidden aria-label="会议讨论记录"></section>
+        <section id="historyView" hidden><div class="view-heading"><h2 id="historyHeading">项目修改记录</h2><p id="historyIntro">记录问题状态、文件版本和成员权限的变更。</p></div><div class="history-list" id="audit"></div></section>
+        <section id="membersView" hidden>
+          <div class="view-heading"><h2 id="membersHeading">项目成员与编辑权限</h2><p id="membersIntro">管理可登录编辑本项目的人员和角色。</p></div>
+          <div class="member-editor">
+            <h2>成员权限</h2>
+            <p class="subtle">仅管理员可新增、停用或调整角色。停用后该邮箱无法读取项目。</p>
+            <div class="member-form">
+              <label>邮箱<input id="memberEmail" type="email" placeholder="name@example.com"></label>
+              <label>姓名<input id="memberName" placeholder="例如：David"></label>
+              <label>角色<select id="memberRole"><option value="editor">Editor</option><option value="viewer">Viewer</option><option value="consultant">Consultant</option><option value="design_lead">Design Lead</option><option value="admin">Admin</option></select></label>
+              <label class="active-label"><input id="memberActive" type="checkbox" checked>允许访问</label>
+              <button id="saveMember" class="primary">保存成员</button>
+            </div>
+          </div>
+          <div id="memberList" class="member-list"></div>
+        </section>
+        <p id="message" class="message" role="status" aria-live="polite"></p>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="newIssueDialog" class="issue-dialog" aria-labelledby="newIssueTitle">
+    <form id="newIssueForm" method="dialog">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">NEW COORDINATION ITEM</p>
+          <h2 id="newIssueTitle">上传新问题</h2>
+          <p class="subtle">只需填写标题和问题说明，其他信息可稍后补充。提出人和时间会自动记录。</p>
+        </div>
+        <button id="closeNewIssue" class="icon-button" type="button" aria-label="关闭">×</button>
+      </div>
+
+      <section class="form-section">
+        <div class="auto-meta">
+          <span><small>提出人</small><strong id="newReporter">—</strong></span>
+          <span><small>提出日期</small><strong id="newReportedAt">—</strong></span>
+        </div>
+      </section>
+
+      <section class="form-section issue-fields">
+        <label>问题标题 <span class="required-mark" aria-hidden="true">*</span><input id="newTitle" required maxlength="120" placeholder="一句话说明问题"></label>
+        <label>问题与当前判断 <span class="required-mark" aria-hidden="true">*</span><textarea id="newDescription" required maxlength="3000" rows="5" placeholder="说明发现了什么，以及目前已知情况"></textarea></label>
+      </section>
+
+      <details id="newIssueExtra" class="issue-extra">
+        <summary>更多信息（选填）</summary>
+      <section class="form-section">
+        <h3>责任专业（选填）</h3>
+        <p class="subtle">可多选；第一个选中的专业为主责，其他为协作。</p>
+        <div id="newDisciplineGrid" class="discipline-grid" role="group" aria-label="责任专业"></div>
+      </section>
+
+      <section class="form-section form-grid">
+        <div>
+          <h3>紧急程度（选填）</h3>
+          <div class="choice-row" data-choice="priority">
+            <button type="button" data-value="P1">P1 · 提交前必须解决</button>
+            <button type="button" data-value="P2" class="selected">P2 · 需协调</button>
+            <button type="button" data-value="P3">P3 · 一般</button>
+          </div>
+        </div>
+        <div>
+          <h3>问题来源（选填）</h3>
+          <div class="choice-row" data-choice="discovery">
+            <button type="button" data-value="自己发现" class="selected">自己发现</button>
+            <button type="button" data-value="与设计师沟通后发现">与设计师沟通后发现</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="form-section issue-fields">
+        <div class="grid2">
+          <label>问题性质
+            <select id="newType">
+              <option>跨专业冲突</option><option>图纸审查</option><option>设计师沟通后发现</option><option>缺少资料</option><option>版本/文件问题</option><option>现场条件</option><option>业主决定与图纸冲突</option><option>其他</option>
+            </select>
+          </label>
+          <label>期望回复日期<input id="newDue" type="date"></label>
+        </div>
+        <label>需要向谁确认 / 谁负责跟进<input id="newFollowUp" maxlength="300" placeholder="例如：机械工程师 Peter；Gary 跟进"></label>
+        <label id="designerContactWrap" hidden>已沟通的设计师 / 日期 / 结论<input id="newDesignerContact" maxlength="500" placeholder="例如：2026-10-07 与 Peter 电话沟通，提出……"></label>
+        <label>要确认的问题<textarea id="newQuestion" maxlength="2000" placeholder="需要设计师或项目成员明确回答什么？"></textarea></label>
+        <label>需要完成的动作<textarea id="newAction" maxlength="2000" placeholder="例如：修订 M1.0/M2.0，并把接管方案发给 Civil"></textarea></label>
+        <label>关闭条件<textarea id="newClosure" maxlength="1500" placeholder="什么证据齐全后，这个问题才可以关闭？"></textarea></label>
+      </section>
+
+      <section class="form-section">
+        <h3>图纸定位（选填）</h3>
+        <div class="location-grid">
+          <label>图纸文件
+            <select id="newSourceFile"><option value="">选择现有图纸</option></select>
+          </label>
+          <label id="newSourceOtherWrap" hidden>其他文件名<input id="newSourceOther" maxlength="240" placeholder="输入文件名"></label>
+          <label>PDF 页码<input id="newSourcePage" type="number" min="1" step="1" placeholder="2"></label>
+          <label>图号<input id="newSourceSheet" maxlength="60" placeholder="M1.0"></label>
+          <label>定位说明<input id="newSourceNote" maxlength="500" placeholder="例如：右下角 demolition note"></label>
+        </div>
+      </section>
+      </details>
+
+      <section class="form-section">
+        <h3>图片 / PDF（选填）</h3>
+        <p class="subtle">可上传图片或 PDF，最多 5 个文件，每个不超过 15 MB。附件仅登录成员可查看。</p>
+        <label class="file-drop">选择图片或 PDF<input id="newAttachments" type="file" accept="image/*,application/pdf,.pdf" multiple></label>
+        <div id="attachmentPreview" class="attachment-preview"></div>
+        <p id="existingIssueAttachments" class="subtle" hidden></p>
+      </section>
+
+      <p id="newIssueMessage" class="message" role="status" aria-live="polite"></p>
+      <div class="dialog-actions">
+        <button id="cancelNewIssue" type="button">取消</button>
+        <button id="submitNewIssue" class="primary" type="submit">保存并上传</button>
+      </div>
+    </form>
+  </dialog>
+
+  <link rel="stylesheet" href="./drawing-markups.css">
+  <link rel="stylesheet" href="./issue-edit.css">
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
+
+

@@ -1,0 +1,5 @@
+header,.context,.metrics,nav,.toolbar,.list,.edit-section,.message{display:none!important}
+.shell{padding:0}
+.layout{display:block;height:auto;min-height:0}
+.detail{overflow:visible;height:auto;border:0;padding:0}
+body{background:#fff}
